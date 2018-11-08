@@ -74,8 +74,10 @@ def crop_to_shape_v2(data,shape):
         return data
     h = data.shape[1] - shape[0]
     w = data.shape[2] - shape[1]
+    
     b1 = h//2
-    e1 = h - b1
+    e1 = data.shape[1] - b1
     b2 = w//2
-    e2 = w-b2
-    return data[:,b1:-e1,b2:-e2]
+    e2 = data.shape[2]-b2
+    #print(data[:,b1:e1,b2:e2].shape)
+    return data[:,b1:e1,b2:e2]

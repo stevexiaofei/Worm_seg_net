@@ -19,6 +19,8 @@ from __future__ import print_function, division, absolute_import, unicode_litera
 #import cv2
 import glob
 import numpy as np
+import cv2
+import os
 from PIL import Image
 
 class BaseDataProvider(object):
@@ -35,7 +37,7 @@ class BaseDataProvider(object):
 
     """
     
-    channels = 1
+    channels = 3
     n_class = 2
     
 
@@ -45,7 +47,7 @@ class BaseDataProvider(object):
 
     def _load_data_and_label(self):
         data, label = self._next_data()
-            
+        #print(label.shape)
         train_data = self._process_data(data)
         labels = self._process_labels(label)
         
@@ -151,15 +153,14 @@ class ImageDataProvider(BaseDataProvider):
     
     """
     
-    def __init__(self, search_path, a_min=None, a_max=None, data_suffix=".tif", mask_suffix='_mask.tif', shuffle_data=True, n_class = 2):
+    def __init__(self,  a_min=None, a_max=None, shuffle_data=True, n_class = 2):
         super(ImageDataProvider, self).__init__(a_min, a_max)
-        self.data_suffix = data_suffix
-        self.mask_suffix = mask_suffix
         self.file_idx = -1
         self.shuffle_data = shuffle_data
         self.n_class = n_class
-        
-        self.data_files = self._find_data_files(search_path)
+        self.image_path='D:\\dataset\\worms\\image'
+        self.label_path='D:\\dataset\\worms\\label'		
+        self.data_files = self._find_data_files(self.image_path)
         
         if self.shuffle_data:
             np.random.shuffle(self.data_files)
@@ -167,18 +168,22 @@ class ImageDataProvider(BaseDataProvider):
         assert len(self.data_files) > 0, "No training files"
         print("Number of files used: %s" % len(self.data_files))
         
-        img = self._load_file(self.data_files[0])
+        img = self._load_file(os.path.join(self.image_path,self.data_files[0]),(800,600))
         self.channels = 1 if len(img.shape) == 2 else img.shape[-1]
         
     def _find_data_files(self, search_path):
-        all_files = glob.glob(search_path)
-        return [name for name in all_files if self.data_suffix in name and not self.mask_suffix in name]
+        return os.listdir(search_path)	
     
-    
-    def _load_file(self, path, dtype=np.float32):
-        return np.array(Image.open(path), dtype)
+    def _load_file(self, path, size):
+        img = cv2.imread(path)
+        img= cv2.resize(img,size)
+        return img.astype(np.float32)
         # return np.squeeze(cv2.imread(image_name, cv2.IMREAD_GRAYSCALE))
-
+    def _load_label(self,path,size):
+        label= cv2.imread(path,0)
+        label=cv2.resize(label,size)
+        ret,th=cv2.threshold(label,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+        return th.astype(np.bool)
     def _cylce_file(self):
         self.file_idx += 1
         if self.file_idx >= len(self.data_files):
@@ -189,9 +194,15 @@ class ImageDataProvider(BaseDataProvider):
     def _next_data(self):
         self._cylce_file()
         image_name = self.data_files[self.file_idx]
-        label_name = image_name.replace(self.data_suffix, self.mask_suffix)
+        label_name = image_name.replace('orgin', 'label')
+	
         
-        img = self._load_file(image_name, np.float32)
-        label = self._load_file(label_name, np.bool)
+        img = self._load_file(os.path.join(self.image_path,image_name),(800,600))
+        label = self._load_label(os.path.join(self.label_path,label_name), (800,600))
     
         return img,label
+if __name__=='__main__':
+	worm_data=ImageDataProvider()
+	img,label = worm_data._next_data()
+	print(img.shape,label.shape)
+	print(np.max(img),np.max(label))

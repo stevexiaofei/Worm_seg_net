@@ -21,14 +21,15 @@ from layers import (weight_variable, weight_variable_devonc, bias_variable,
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 
 class SegNet(object):
-	def __init__(self,learning_rate = 0.0017, channels=3, n_class=2,decay_step=2000,decay = 0.96, cost="cross_entropy", 
+	def __init__(self,cfg,learning_rate = 0.0017, channels=3, n_class=2,decay_step=2000,decay = 0.96, cost="cross_entropy", 
 						cost_kwargs={}, **kwargs):
 		print('begin initialize!')
+		self.cfg=cfg
 		self.n_class = n_class
-		self.in_shape =(512,512)
+		self.in_shape =(592,800)
 		self.summaries = kwargs.get("summaries", True)
-		self.x = tf.placeholder("float", shape=[None, None, None, channels])
-		self.y = tf.placeholder("float", shape=[None, None, None, n_class])
+		self.x = tf.placeholder("float", shape=[None, 592, 800, channels])
+		self.y = tf.placeholder("float", shape=[None, 592, 800, n_class])
 		self.Dropout_Rate = tf.placeholder(tf.float32)  # dropout (keep probability)
 		self.IsTraining = tf.placeholder(tf.bool)
 		logits = self._creat_model(self.x,channels,n_class)
@@ -241,11 +242,11 @@ class SegNet(object):
 	def _creat_model(self,x,channels, n_class, layers=3, features_root=16, 
 				filter_size=3, pool_size=2,summaries=True):
 		# Placeholder for the input image
-		nx = tf.shape(x)[1]
-		ny = tf.shape(x)[2]
-		x_image = tf.reshape(x, tf.stack([-1, nx, ny, channels]))
-		in_node = x_image
-		batch_size = tf.shape(x_image)[0]
+		#nx = tf.shape(x)[1]
+		#ny = tf.shape(x)[2]
+		#x_image = tf.reshape(x, tf.stack([-1, nx, ny, channels]))
+		in_node = x
+		#batch_size = tf.shape(x_image)[0]
 		with tf.name_scope('model'):
 			with tf.name_scope('preprocessing'):
 				pad1 = tf.pad(in_node, [[0,0],[1,1],[1,1],[0,0]], name='pad_1')
@@ -357,7 +358,8 @@ class SegNet(object):
 			shutil.rmtree(abs_prediction_path, ignore_errors=True)
 			logging.info("Removing '{:}'".format(output_path))
 			shutil.rmtree(output_path, ignore_errors=True)
-
+		else:
+			self.restore(sess,output_path)
 		if not os.path.exists(abs_prediction_path):
 			logging.info("Allocating '{:}'".format(abs_prediction_path))
 			os.makedirs(abs_prediction_path)
@@ -386,6 +388,7 @@ class SegNet(object):
 		if epochs == 0:
 			return save_path
 		self.prediction_path = prediction_path
+		self.model_path = output_path
 		self._initialize(output_path,prediction_path)
 		#gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.75)
 		#config=tf.ConfigProto(gpu_options=gpu_options)
@@ -401,8 +404,10 @@ class SegNet(object):
 					self.restore(sess, ckpt.model_checkpoint_path)
 			#############################
 			self.verification_batch_size=2
-			self.batch_size=2
+			self.batch_size=1
 			test_x, test_y = data_provider(self.verification_batch_size)
+			#print('shape')
+			#print(test_x.shape,test_y.shape)
 			pred_shape = self.store_prediction(sess, test_x, test_y, "_init")
 
 			summary_writer = tf.summary.FileWriter(output_path, graph=sess.graph)
@@ -410,6 +415,7 @@ class SegNet(object):
 
 			avg_gradients = None
 			for epoch in range(epochs):
+				test_x, test_y = data_provider(self.verification_batch_size)
 				total_loss = 0
 				for step in range((epoch * training_iters), ((epoch + 1) * training_iters)):
 					batch_x, batch_y = data_provider(self.batch_size)
@@ -437,6 +443,7 @@ class SegNet(object):
 
 	def store_prediction(self, sess, batch_x, batch_y, name):
 		y = crop_to_shape_v2(batch_y,self.in_shape)
+		#print(y.shape)
 		prediction = sess.run(self.predicter, feed_dict={self.x: crop_to_shape_v2(batch_x,self.in_shape),
                                                              self.y: y,
                                                              self.Dropout_Rate: 0.,
