@@ -29,16 +29,16 @@ class SegNet(object):
 		self.in_shape =(592,800)
 		self.summaries = kwargs.get("summaries", True)
 		self.x = tf.placeholder("float", shape=[None, 592, 800, channels])
-		self.y = tf.placeholder("float", shape=[None, 592, 800, n_class])
+		self.y = tf.placeholder("float", shape=[None, 592, 800, 1])
 		self.Dropout_Rate = tf.placeholder(tf.float32)  # dropout (keep probability)
 		self.IsTraining = tf.placeholder(tf.bool)
-		logits = self._creat_model(self.x,channels,n_class)
-		self.loss = self._get_cost(logits, cost, cost_kwargs)
-		self.predicter = pixel_wise_softmax_2(logits)
-		self.correct_pred = tf.equal(tf.argmax(self.predicter, 3), tf.argmax(self.y, 3))
+		self.logits = self._creat_model(self.x,channels,n_class)
+		self.loss = -tf.reduce_mean(self.y*tf.log(tf.clip_by_value(self.logits,1e-10,1.0)))+\
+				 -tf.reduce_mean((1-self.y)*tf.log(tf.clip_by_value(1-self.logits,1e-10,1.0)))
+		self.predicter =tf.sign(self.logits-0.5)
+		self.correct_pred = tf.equal(tf.cast(self.predicter, tf.bool), tf.cast(self.y, tf.bool))
 		self.accuracy = tf.reduce_mean(tf.cast(self.correct_pred, tf.float32))
-		self.cross_entropy = tf.reduce_mean(cross_entropy(tf.reshape(self.y, [-1, n_class]),
-                                                          tf.reshape(pixel_wise_softmax_2(logits), [-1, n_class])))
+		self.cross_entropy = self.loss
 		self.decay_step = decay_step
 		self.decay = decay
 		self.verification_batch_size =4
@@ -258,12 +258,12 @@ class SegNet(object):
 				in_node=self._hg_mcam(in_node,3,16,2)
 			with tf.name_scope('attention'):
 				drop = tf.layers.dropout(in_node, rate=self.Dropout_Rate, training = self.IsTraining)
-				ll = self._lin(in_node,16)
-				att = self._attention_iter(ll,3,3)
+				output = self._lin(in_node,1)
+				#att = self._attention_iter(ll,3,3)
 			#upsample = tf.image.resize_nearest_neighbor(att, tf.shape(att)[1:3]*2, name = 'upsampling')
-			with tf.name_scope('output'):
-				out = self._lin(att,2)
-		return out
+			# with tf.name_scope('output'):
+				# out = self._lin(att,2)
+		return tf.nn.sigmoid(output)
 	def _get_cost(self, logits, cost_name, cost_kwargs):
 		"""
         Constructs the cost function, either cross_entropy, weighted cross_entropy or dice_coefficient.
@@ -414,6 +414,7 @@ class SegNet(object):
 			logging.info("Start optimization")
 
 			avg_gradients = None
+			seld.save_dict= {'loss':[],'acc':[]}
 			for epoch in range(epochs):
 				test_x, test_y = data_provider(self.verification_batch_size)
 				total_loss = 0
@@ -432,7 +433,7 @@ class SegNet(object):
 						self.output_minibatch_stats(sess, summary_writer, step, batch_x,batch_y)
 
 					total_loss += loss
-
+				np.savez('log_data.npz',**self.save_dict)
 				self.output_epoch_stats(epoch, total_loss, training_iters, lr)
 				self.store_prediction(sess, test_x, test_y, "epoch_%s" % epoch)
 
@@ -453,7 +454,7 @@ class SegNet(object):
                                                   self.y:y ,
 														 self.IsTraining:False,
                                                   self.Dropout_Rate: 0})
-
+		
 		logging.info("Verification error= {:.1f}%, loss= {:.4f}".format(error_rate(prediction,crop_to_shape_v2(batch_y,self.in_shape)),
                                                                         loss))
 
@@ -475,24 +476,20 @@ class SegNet(object):
                                                       self.y: crop_to_shape_v2(batch_y,self.in_shape),
                                                                   self.IsTraining: False,
 																			self.Dropout_Rate:1.})
+		self.save_dict['loss'].append(loss)
+		self.save_dict['acc'].append(acc)
 		summary_writer.add_summary(summary_str, step)
 		summary_writer.flush()
 		logging.info(
-            "Iter {:}, Minibatch Loss= {:.4f}, Training Accuracy= {:.4f}, Minibatch error= {:.1f}%".format(step,
-                                                                                                           loss,
-                                                                                                           acc,
-                                                                                                           error_rate(
-                                                                                                               predictions,
-                                                                                                               crop_to_shape_v2(batch_y,self.in_shape))))
-       
+            "Iter {:}, Minibatch Loss= {:.4f}, Training Accuracy= {:.4f}".format(step,loss,acc))
 def error_rate(predictions, labels):
     """
     Return the error rate based on dense predictions and 1-hot labels.
     """
-
+    #print(np.unique(predictions),np.unique(labels))
     return 100.0 - (
             100.0 *
-            np.sum(np.argmax(predictions, 3) == np.argmax(labels, 3)) /
+            np.sum(np.sign(predictions-0.5) == np.sign(labels-0.5)) /
             (predictions.shape[0] * predictions.shape[1] * predictions.shape[2]))
 
 

@@ -127,8 +127,8 @@ def combine_img_prediction(data, gt, pred):
     #print('pred',pred.shape)
     img1= crop_to_shape_v2(data, pred.shape[1:3]).reshape(-1, ny, ch)
     img = np.concatenate((to_rgb(img1), 
-                          to_rgb(crop_to_shape_v2(gt[..., 1], pred.shape[1:3]).reshape(-1, ny, 1)), 
-                          to_rgb(pred[..., 1].reshape(-1, ny, 1))), axis=1)
+                          to_rgb(crop_to_shape_v2(gt[..., 0], pred.shape[1:3]).reshape(-1, ny, 1)), 
+                          to_rgb(pred[..., 0].reshape(-1, ny, 1))), axis=1)
     return img
 
 def save_image(img, path):

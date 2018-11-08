@@ -56,20 +56,15 @@ class BaseDataProvider(object):
         nx = train_data.shape[1]
         ny = train_data.shape[0]
 
-        return train_data.reshape(1, ny, nx, self.channels), labels.reshape(1, ny, nx, self.n_class),
+        return train_data.reshape(1, ny, nx, self.channels), labels.reshape(1, ny, nx, 1),
     
     def _process_labels(self, label):
         #print('label shape',label.shape)
-        if self.n_class == 2:
-            nx = label.shape[1]
-            ny = label.shape[0]
-            labels = np.zeros((ny, nx, self.n_class), dtype=np.float32)
-            labels[..., 1] = label
-            labels[..., 0] = ~label
-            return labels
-        
-        return label
-    
+        ny,nx = label.shape
+        labels = np.zeros((ny, nx, 1), dtype=np.float32)
+        labels[..., 0] = label
+        return labels
+
     def _process_data(self, data):
         # normalization
         data = np.clip(np.fabs(data), self.a_min, self.a_max)
@@ -91,8 +86,8 @@ class BaseDataProvider(object):
         nx = train_data.shape[1]
         ny = train_data.shape[2]
     
-        X = np.zeros((n, nx, ny, self.channels))
-        Y = np.zeros((n, nx, ny, self.n_class))
+        X = np.zeros((n, nx, ny, self.channels),dtype=np.float32)
+        Y = np.zeros((n, nx, ny,1),dtype=np.float32)
     
         X[0] = train_data
         Y[0] = labels
@@ -182,7 +177,7 @@ class ImageDataProvider(BaseDataProvider):
     def _load_label(self,path,size):
         label= cv2.imread(path,0)
         label=cv2.resize(label,size)
-        ret,th=cv2.threshold(label,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+        ret,th=cv2.threshold(label,0,1,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
         return th.astype(np.bool)
     def _cylce_file(self):
         self.file_idx += 1
